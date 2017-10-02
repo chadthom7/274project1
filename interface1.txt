@@ -1,0 +1,288 @@
+import serial
+import time
+import struct
+import threading
+import sys
+
+#Global variables
+connection = None
+buttonP = True
+go = False
+
+#This checked to see whether a connection was established to the robot
+
+#If connection is not None then the user was prompted to enter a command to the robot
+def sendInputCommand():
+    global connection
+
+    try:
+        if connection is not None:
+            command = input( "What command would you like to send to the robot?\n")
+            connection.write(chr(command))
+        else:
+            print "Not Connected!"
+    except serial.SerialException:
+            print "Connection has been lost!"
+            connection = None
+
+#This takes in a raw form of a command and then sends it to the robot
+def sendCommandRaw(command):
+    global connection
+    
+    try:
+        if connection is not None:
+            connection.write(chr(command))
+        else:
+            print "Not Connected!"
+    except serial.SerialException:
+            print "Connection has been lost!"
+            connection = None
+
+def sendCommand(command):
+    global connection
+    
+    try:
+        if connection is not None:
+            connection.write(command)
+        else:
+            print "Not Connected!"
+    except serial.SerialException:
+            print "Connection has been lost!"
+            connection = None
+    
+#Reads data from the robot by sending the OPCODE to request the sensors
+def read():
+    global connection
+
+    try:
+        connection.write('142') 
+        return struct.unpack(">h", connection.read(2))[0]
+    except serial.SerialException: 
+        print "Lost connection"
+        connection = None
+    except struct.error:
+        print "Got unexpected data from serial port."
+        return None
+    
+    
+#establishes a connection to the robot through the USB0 port, throw exception if no
+def onConnect():
+    global connection
+
+    port = '/dev/ttyUSB0'
+    
+    try:
+        connection = serial.Serial('/dev/ttyUSB0', baudrate=115200, timeout=1)
+        print "Connection Successful"
+    except serial.SerialException:
+        print "Connection failed"
+
+#Quits everything
+def onQuit():
+    sys.exit()
+
+#Puts the robot in passive mode if the command is sent while the robot is off        
+def Start():
+    print 'Starting Robot'
+    sendCommandRaw(128)
+    time.sleep(0.25)  
+
+#Puts the robot in passive mode if the command is sent while the robot is off        
+def Passive():
+    print 'Putting robot in passive mode'
+    sendCommandRaw(128)
+    time.sleep(.25)
+
+#Acts as if the battery was removed and reinserted    
+def Reset():
+    print 'Resetting Robot'
+    sendCommandRaw(7)
+    time.sleep(.25)
+    
+def Stop():
+    print 'Stopping robot'
+    sendCommandRaw(173)
+
+#These are other opCodes we were testing during the project to familiarize ourselves    
+def Safe():
+    print 'Putting Robot in safe mode'
+    sendCommandRaw(131)
+    time.sleep(.25)
+    
+    
+def Clean():
+    print 'Cleaning'
+    sendCommandRaw(135)
+
+#This command controlled the drive wheels by sending the OPCODE 137 and by
+#Setting the values for the radius and velocity where 32767 is a special case
+#To drive straight    
+   
+def Drive():
+    print 'Driving Robot'
+    cmd = struct.pack('!Bhh', 137, 200, 32767)
+    sendCommand(cmd)
+
+#Haults the robot by setting velocity to 0
+def stopDrive():
+    print 'Stopping Robot'
+    cmd = struct.pack('!Bhh', 137, 0, 32767)
+    sendCommand(cmd)
+
+#Allows the user to see button presses on the robot
+def getButtons(button):
+    print "Getting Buttons"
+    cmd = struct.pack('!BB', 142, 18)
+    sendCommand(cmd)
+    x = connection.read(1)
+    print bin(ord(x)+256)[button+3]
+    return bin(ord(x)+256)[button+3]
+
+#Reads data from the distance sensor(sends 142 to request) allowing the robot to know how far it traveled
+
+def getDistance():
+    cmd = struct.pack('!BB', 142, 19)
+    sendCommand(cmd)
+    x = connection.read(2)
+    return struct.unpack('!h', x)[0]
+
+#Sends 142 to request sensor data, then read in 2 bytes
+#Since clockwise is negative times it b -1 and divides it by .324056 to get degrees
+def getAngle():
+    cmd = struct.pack('!BB', 142, 25)
+    sendCommand(cmd)
+    x = connection.read(2)
+    return (struct.unpack('!h', x)[0] * -1)/(0.324056)
+
+#rotates in place at a velocity of 40 
+def rotate90():
+    cmd = struct.pack('!Bhh', 137, 40, -1)
+    sendCommand(cmd)
+    #time.sleep(.25)
+
+#method to check buttons and stop the robot, then quit loop
+def checkButton():
+    if getButtons(7) == '1':
+        stopDrive()
+        onQuit()
+    
+        
+        
+#Main loop executed
+    
+onConnect()
+Reset()
+time.sleep(4)
+Start()
+time.sleep(2)
+Safe()
+time.sleep(2)
+#exitTimer = threading.Timer(.5, checkButton())
+
+while buttonP == True:
+    time.sleep(.25)
+    if getButtons(7) == '1':
+        go = True
+        time.sleep(.25)
+        buttonP = False
+      
+while go == True:
+    #tried to use a timer while the while loop was running, but gave me an object error..
+    #exitTimer.start()
+    time.sleep(.25)
+
+    #this code is not repetitive after the first block of code, for some reason theres a time delay where we have to change
+    #the time of rotation for each block
+    Drive()
+    checkButton()
+    time.sleep(1.25)
+    checkButton()
+    stopDrive()
+    checkButton()
+    time.sleep(.25)
+    checkButton()
+    rotate90()
+    checkButton()
+    time.sleep(2.6)
+    checkButton()
+    stopDrive()
+    checkButton()
+    time.sleep(.25)
+    checkButton()
+    
+    Drive()
+    checkButton()
+    time.sleep(1.25)
+    checkButton()
+    stopDrive()
+    checkButton()
+    time.sleep(.25)
+    checkButton()
+    rotate90()
+    checkButton()
+    time.sleep(2.5)
+    checkButton()
+    stopDrive()
+    checkButton()
+    time.sleep(.25)
+
+    Drive()
+    checkButton()
+    time.sleep(1.25)
+    checkButton()
+    stopDrive()
+    time.sleep(.25)
+    checkButton()
+    rotate90()
+    checkButton()
+    time.sleep(2.6)
+    checkButton()
+    stopDrive()
+    checkButton()
+    time.sleep(.25)
+
+    Drive()
+    checkButton()
+    time.sleep(1.25)
+    checkButton()
+    stopDrive()
+    checkButton()
+    time.sleep(.25)
+    checkButton()
+    rotate90()
+    checkButton()
+    time.sleep(2.65)
+    checkButton()
+    stopDrive()
+    checkButton()
+    time.sleep(.25)
+    checkButton()
+
+#stopDrive()    
+distance = 0
+buttonPress = 0
+angle = 0
+turns = 0
+#rotate = True
+#This was working, but at some point the sensors stopped outputting the right values for our distance..
+#Edit the serial needs to be reset after a certain amount of time because the serials give wrong readings
+#this was going to be the more sufficient code, but we came to this error last minute, and had to switch it
+#to get it working at the least
+"""while True:
+    time.sleep(.25)
+    if getButtons(7)== '1':
+        distance += getDistance()
+        Drive()
+
+        if distance >= 250:
+            stopDrive()
+            distance = 0
+            time.sleep(.25)
+            rotate90()
+            angle += getAngle()
+        
+        if angle >= 180:
+            #print angle
+            stopDrive()"""
+
+#Drive()
